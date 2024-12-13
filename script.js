@@ -3,186 +3,163 @@ const itemInput = document.getElementById('item-input');
 const dueDateInput = document.getElementById('due-date-input');
 const itemList = document.getElementById('item-list');
 const clearBtn = document.getElementById('clear');
-const itemFilter = document.getElementById('filter');
-const formBtn = itemForm.querySelector('button');
 let timers = {};
 
-// Function to display the current date and time in IST
+// Display current date and time
 function updateDateTime() {
   const now = new Date();
-  const options = {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  };
-  const formattedDateTime = now.toLocaleString('en-US', options);
-  document.getElementById('date-time').textContent = formattedDateTime;
+  document.getElementById('date-time').textContent = now.toLocaleString();
 }
 
-// Function to update the task count
+// Display task count
 function updateTaskCount() {
-  const itemsFromStorage = getItemsFromStorage();
-  const taskCount = itemsFromStorage.length;
-  document.getElementById('task-count').textContent = `${taskCount} tasks`;
+  const tasks = getItemsFromStorage();
+  document.getElementById('task-count').textContent = `${tasks.length} tasks`;
 }
 
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = String(date.getFullYear()).slice(2);
-  return `${day}/${month}/${year}`;
-}
-
-function displayItems() {
-  const itemsFromStorage = getItemsFromStorage();
-  itemsFromStorage.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-  itemsFromStorage.forEach((item) => addItemToDOM(item));
-  checkUI();
-  updateTaskCount(); // Update task count after displaying items
-}
-
+// Add new task
 function onAddItemSubmit(e) {
   e.preventDefault();
-  const newItem = itemInput.value.trim();
+  const task = itemInput.value.trim();
   const dueDate = dueDateInput.value;
-
-  if (newItem === '') {
-    alert('Please add an item');
+  if (!task) {
+    alert('Please enter a task');
     return;
   }
-  const formattedDueDate = dueDate ? formatDate(dueDate) : "None set";
 
-  const item = { task: newItem, dueDate: formattedDueDate, completed: false, elapsedTime: 0 };
+  const newTask = {
+    task,
+    dueDate: dueDate || 'No deadline',
+    completed: 0,
+    elapsedTime: 0,
+  };
 
-  addItemToDOM(item);
-  addItemToStorage(item);
-  checkUI();
-  updateTaskCount(); // Update task count after adding a new item
+  addItemToDOM(newTask);
+  saveToStorage(newTask);
 
   itemInput.value = '';
   dueDateInput.value = '';
+  updateTaskCount();
 }
 
-function addItemToDOM(item) {
-  const li = document.createElement("li");
-  li.appendChild(document.createTextNode(`${item.task} - Due: ${item.dueDate}`));
+// Add task to DOM
+function addItemToDOM(task) {
+  const li = document.createElement('li');
 
-  // Create Start/Stop Timer clock icon
-  const timerButton = createButton("start-timer timer-icon");
-  timerButton.innerHTML = item.elapsedTime > 0 ? "&#x23F2;" : "&#x1F550;"; // Clock icon (start/resume)
-  timerButton.addEventListener("click", () => toggleTimer(item, li));
-  li.appendChild(timerButton);
+  // Task details
+  const detailsDiv = document.createElement('div');
+  detailsDiv.className = 'task-details';
+  detailsDiv.innerHTML = `
+    <span>${task.task} - Due: ${task.dueDate}</span>
+    <span class="timer">0:00</span>
+  `;
 
-  const timerSpan = document.createElement("span");
-  timerSpan.className = "timer";
-  const minutes = Math.floor(item.elapsedTime / 60);
-  const seconds = item.elapsedTime % 60;
-  timerSpan.textContent = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  li.appendChild(timerSpan);
+  // Start/Stop timer button
+  const timerBtn = document.createElement('button');
+  timerBtn.textContent = 'Start Timer';
+  timerBtn.className = 'btn';
+  timerBtn.addEventListener('click', () => toggleTimer(task, detailsDiv));
+  detailsDiv.appendChild(timerBtn);
 
-  const removeButton = createButton("remove-item btn-link text-red");
-  removeButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-  removeButton.addEventListener("click", () => removeItem(item, li));
-  li.appendChild(removeButton);
+  li.appendChild(detailsDiv);
 
+  // Completion slider
+  const completionDiv = document.createElement('div');
+  completionDiv.className = 'completion';
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = 0;
+  slider.max = 100;
+  slider.value = task.completed;
+  slider.className = 'slider';
+  const percentage = document.createElement('span');
+  percentage.textContent = `${task.completed}%`;
+
+  slider.addEventListener('input', (e) => {
+    task.completed = e.target.value;
+    percentage.textContent = `${task.completed}%`;
+    updateTaskInStorage(task);
+  });
+
+  completionDiv.appendChild(slider);
+  completionDiv.appendChild(percentage);
+
+  li.appendChild(completionDiv);
+
+  // Append task to the list
   itemList.appendChild(li);
 }
 
-function createButton(classes) {
-  const button = document.createElement("button");
-  button.className = classes;
-  return button;
-}
+// Toggle timer functionality
+function toggleTimer(task, detailsDiv) {
+  const timerSpan = detailsDiv.querySelector('.timer');
+  const timerBtn = detailsDiv.querySelector('button');
 
-function toggleTimer(item, li) {
-  const timerSpan = li.querySelector(".timer");
-  const timerButton = li.querySelector(".start-timer");
-
-  if (!timers[item.task]) {
+  if (!timers[task.task]) {
     // Start Timer
-    let seconds = item.elapsedTime;
-    timers[item.task] = setInterval(() => {
+    let seconds = task.elapsedTime;
+    timers[task.task] = setInterval(() => {
       seconds++;
-      item.elapsedTime = seconds; // Update elapsed time for the task
+      task.elapsedTime = seconds; // Update elapsed time for the task
       const minutes = Math.floor(seconds / 60);
       const secs = seconds % 60;
       timerSpan.textContent = `${minutes}:${secs.toString().padStart(2, "0")}`;
-      updateItemInStorage(item); // Store updated elapsed time in storage
+      updateTaskInStorage(task);
     }, 1000);
 
-    timerButton.innerHTML = "&#x23F3;"; // Pause (clock icon)
+    timerBtn.textContent = 'Stop Timer';
   } else {
     // Stop Timer
-    clearInterval(timers[item.task]);
-    delete timers[item.task];
-    timerButton.innerHTML = "&#x1F550;"; // Start (clock icon)
-  }
-  updateItemInStorage(item); // Store updated elapsed time in storage
-}
-
-function removeItem(item, li) {
-  if (confirm(`Are you sure you want to delete the task "${item.task}"?`)) {
-    li.remove();
-    removeItemFromStorage(item);
-    checkUI();
-    updateTaskCount(); // Update task count after removing an item
+    clearInterval(timers[task.task]);
+    delete timers[task.task];
+    timerBtn.textContent = 'Start Timer';
   }
 }
 
-function clearItems() {
-  if (confirm('Are you sure you want to clear all tasks?')) {
-    itemList.innerHTML = '';
-    localStorage.removeItem("items");
-    checkUI();
-    updateTaskCount(); // Update task count after clearing all items
-  }
+// Save task to local storage
+function saveToStorage(task) {
+  const tasks = getItemsFromStorage();
+  tasks.push(task);
+  localStorage.setItem('tasks', JSON.stringify(tasks));
 }
 
-function removeItemFromStorage(item) {
-  const itemsFromStorage = getItemsFromStorage();
-  const updatedItems = itemsFromStorage.filter(i => i.task !== item.task);
-  localStorage.setItem("items", JSON.stringify(updatedItems));
-}
-
-function checkUI() {
-  const itemsFromStorage = getItemsFromStorage();
-  if (itemsFromStorage.length === 0) {
-    clearBtn.style.display = 'none';
-  } else {
-    clearBtn.style.display = 'block';
-  }
-}
-
+// Get tasks from local storage
 function getItemsFromStorage() {
-  return localStorage.getItem("items")
-    ? JSON.parse(localStorage.getItem("items"))
+  return localStorage.getItem('tasks')
+    ? JSON.parse(localStorage.getItem('tasks'))
     : [];
 }
 
-function addItemToStorage(item) {
-  const itemsFromStorage = getItemsFromStorage();
-  itemsFromStorage.push(item);
-  localStorage.setItem("items", JSON.stringify(itemsFromStorage));
+// Update task in local storage
+function updateTaskInStorage(task) {
+  const tasks = getItemsFromStorage();
+  const index = tasks.findIndex(t => t.task === task.task);
+  if (index !== -1) {
+    tasks[index] = task;
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+  }
 }
 
-function updateItemInStorage(item) {
-  const itemsFromStorage = getItemsFromStorage();
-  const index = itemsFromStorage.findIndex(i => i.task === item.task);
-  if (index !== -1) {
-    itemsFromStorage[index] = item;
-    localStorage.setItem("items", JSON.stringify(itemsFromStorage));
+// Display all tasks on page load
+function displayItems() {
+  const tasks = getItemsFromStorage();
+  tasks.forEach(addItemToDOM);
+  updateTaskCount();
+}
+
+// Clear all tasks
+function clearItems() {
+  if (confirm('Are you sure you want to clear all tasks?')) {
+    localStorage.removeItem('tasks');
+    itemList.innerHTML = '';
+    updateTaskCount();
   }
 }
 
 // Event Listeners
-itemForm.addEventListener("submit", onAddItemSubmit);
-clearBtn.addEventListener("click", clearItems);
-document.addEventListener("DOMContentLoaded", displayItems);
-document.addEventListener("DOMContentLoaded", updateDateTime);
+itemForm.addEventListener('submit', onAddItemSubmit);
+clearBtn.addEventListener('click', clearItems);
+document.addEventListener('DOMContentLoaded', displayItems);
+document.addEventListener('DOMContentLoaded', updateDateTime);
 setInterval(updateDateTime, 1000); // Update every second
+
