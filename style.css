@@ -115,3 +115,13 @@ li {
   cursor: pointer;
 }
 
+.remove-btn {
+  background-color: #ff3333;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
