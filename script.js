@@ -61,6 +61,13 @@ function addItemToDOM(task) {
   timerBtn.addEventListener('click', () => toggleTimer(task, detailsDiv));
   detailsDiv.appendChild(timerBtn);
 
+  // Remove task button
+  const removeBtn = document.createElement('button');
+  removeBtn.textContent = 'Remove';
+  removeBtn.className = 'remove-btn';
+  removeBtn.addEventListener('click', () => removeItem(task, li));
+  detailsDiv.appendChild(removeBtn);
+
   li.appendChild(detailsDiv);
 
   // Completion slider
@@ -140,6 +147,21 @@ function updateTaskInStorage(task) {
   }
 }
 
+// Remove task
+function removeItem(task, li) {
+  if (confirm('Are you sure you want to remove this task?')) {
+    const tasks = getItemsFromStorage();
+    const updatedTasks = tasks.filter(t => t.task !== task.task);
+    localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    itemList.removeChild(li);
+    updateTaskCount();
+    if (timers[task.task]) {
+      clearInterval(timers[task.task]);
+      delete timers[task.task];
+    }
+  }
+}
+
 // Display all tasks on page load
 function displayItems() {
   const tasks = getItemsFromStorage();
@@ -162,4 +184,3 @@ clearBtn.addEventListener('click', clearItems);
 document.addEventListener('DOMContentLoaded', displayItems);
 document.addEventListener('DOMContentLoaded', updateDateTime);
 setInterval(updateDateTime, 1000); // Update every second
-
